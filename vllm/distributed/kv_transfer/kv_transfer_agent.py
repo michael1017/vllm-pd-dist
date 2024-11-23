@@ -83,3 +83,46 @@ class KVTransferAgent:
 
         return self.connector.recv_kv_caches_and_hidden_states(
             model_executable, input_tokens, attn_metadata, kv_caches)
+        
+    def send_single_layer_kv_cache(
+        self,
+        model_executable: torch.nn.Module,
+        input_tokens,
+        attn_metadata,
+        kv_caches: List[torch.Tensor],
+        layer_id
+    ) -> None:
+
+        self.connector.send_single_layer_kv_cache(
+            model_executable, input_tokens, attn_metadata, kv_caches, layer_id)
+
+    def recv_single_layer_kv_cache(
+        self,
+        model_executable: torch.nn.Module,
+        input_tokens,
+        attn_metadata,
+        kv_caches: List[torch.Tensor],
+        layer_id
+    ) -> None:
+
+        self.connector.recv_single_layer_kv_cache(
+            model_executable, input_tokens, attn_metadata, kv_caches, layer_id)
+    
+    def send_hidden_states(
+        self,
+        input_tokens,
+        attn_metadata,
+        hidden_or_intermediate_states,
+    ):
+        self.connector.send_hidden_states(
+            input_tokens, attn_metadata, hidden_or_intermediate_states
+        )
+
+    def recv_hidden_states(
+        self,
+        input_tokens,
+        attn_metadata,
+    ): 
+        return self.connector.recv_hidden_states(
+            input_tokens, attn_metadata
+        )

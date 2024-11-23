@@ -156,6 +156,45 @@ class KVConnectorBase(ABC):
         raise NotImplementedError
 
     @abstractmethod
+    def send_single_layer_kv_cache(
+        self,
+        model_executable: torch.nn.Module,
+        input_tokens,
+        attn_metadata,
+        kv_caches: List[torch.Tensor],
+        layer_id
+    ) -> None:
+        raise NotImplementedError
+    
+    @abstractmethod
+    def recv_single_layer_kv_cache(
+        self,
+        model_executable: torch.nn.Module,
+        input_tokens,
+        attn_metadata,
+        kv_caches: List[torch.Tensor],
+        layer_id
+    ) -> None:
+        raise NotImplementedError
+    
+    @abstractmethod
+    def send_hidden_states(
+        self,
+        input_tokens,
+        attn_metadata,
+        hidden_or_intermediate_states,
+    ):
+        raise NotImplementedError
+    
+    @abstractmethod
+    def recv_hidden_states(
+        self,
+        input_tokens,
+        attn_metadata,
+    ): 
+        raise NotImplementedError
+
+    @abstractmethod
     def recv_kv_caches_and_hidden_states(
         self, model_executable: torch.nn.Module,
         input_tokens,
