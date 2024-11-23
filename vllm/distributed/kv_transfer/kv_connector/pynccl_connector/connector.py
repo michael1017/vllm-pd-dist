@@ -105,17 +105,18 @@ class PyNcclConnector(KVConnectorBase):
     def send_kv_caches_and_hidden_states(
         self,
         model_executable: torch.nn.Module,
-        model_input: "ModelInputForGPUWithSamplingMetadata",
+        input_tokens,
+        attn_metadata,
         kv_caches: List[torch.Tensor],
         hidden_or_intermediate_states: Union[torch.Tensor,
                                              IntermediateTensors],
     ) -> None:
 
-        input_tokens_tensor = model_input.input_tokens
-        seq_lens = model_input.attn_metadata.seq_lens
-        slot_mapping_flat = model_input.attn_metadata.slot_mapping.flatten()
-        start_layer = model_executable.model.start_layer
-        end_layer = model_executable.model.end_layer
+        input_tokens_tensor = input_tokens
+        seq_lens = attn_metadata.seq_lens
+        slot_mapping_flat = attn_metadata.slot_mapping.flatten()
+        start_layer = model_executable.start_layer
+        end_layer = model_executable.end_layer
 
         # query_lens contains new KV caches that are added to vLLM.
         # so we will send them to decode instance
@@ -152,7 +153,8 @@ class PyNcclConnector(KVConnectorBase):
 
     def recv_kv_caches_and_hidden_states(
         self, model_executable: torch.nn.Module,
-        model_input: "ModelInputForGPUWithSamplingMetadata",
+        input_tokens,
+        attn_metadata,
         kv_caches: List[torch.Tensor]
     ) -> Tuple[Union[torch.Tensor, IntermediateTensors], bool,
                "ModelInputForGPUWithSamplingMetadata"]:
@@ -163,9 +165,11 @@ class PyNcclConnector(KVConnectorBase):
         # and hidden states.
         bypass_model_exec = True
 
-        input_tokens_tensor = model_input.input_tokens
-        seq_lens = model_input.attn_metadata.seq_lens
-        slot_mapping = model_input.attn_metadata.slot_mapping.flatten()
+        input_tokens_tensor = input_tokens
+        seq_lens = attn_metadata.seq_lens
+        slot_mapping = attn_metadata.slot_mapping.flatten()
+        start_layer = model_executable.start_layer
+        end_layer = model_executable.end_layer
 
         hidden_or_intermediate_states_for_one_req = []
 
@@ -212,18 +216,15 @@ class PyNcclConnector(KVConnectorBase):
             end_pos = start_pos + num_computed_tokens
 
             # put received KV caches into paged memory
-            for i in range(model_executable.model.start_layer,
-                           model_executable.model.end_layer):
+            for i in range(start_layer, end_layer):
 
-                kv_cache = kv_caches[i - model_executable.model.start_layer]
-                layer = model_executable.model.layers[i]
+                kv_cache = kv_caches[i - start_layer]
+                layer = model_executable.layers[i]
 
                 key_cache, value_cache = kv_cache[0], kv_cache[1]
                 ops.reshape_and_cache_flash(
-                    keys[i - model_executable.model.start_layer].to(
-                        key_cache.device),
-                    values[i - model_executable.model.start_layer].to(
-                        value_cache.device),
+                    keys[i - start_layer].to(key_cache.device),
+                    values[i - start_layer].to(value_cache.device),
                     key_cache,
                     value_cache,
                     slot_mapping[start_pos:end_pos],
@@ -249,7 +250,7 @@ class PyNcclConnector(KVConnectorBase):
             hidden_or_intermediate_states = torch.cat(
                 hidden_or_intermediate_states_for_one_req, dim=0)
 
-        return hidden_or_intermediate_states, bypass_model_exec, model_input
+        return hidden_or_intermediate_states, bypass_model_exec
 
     def close(self):
         self.producer_data_pipe.close()

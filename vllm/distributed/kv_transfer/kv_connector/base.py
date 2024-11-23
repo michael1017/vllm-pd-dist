@@ -124,7 +124,8 @@ class KVConnectorBase(ABC):
     def send_kv_caches_and_hidden_states(
         self,
         model_executable: torch.nn.Module,
-        model_input: "ModelInputForGPUWithSamplingMetadata",
+        input_tokens,
+        attn_metadata,
         kv_caches: List[torch.Tensor],
         hidden_or_intermediate_states: Union[torch.Tensor,
                                              IntermediateTensors],
@@ -157,7 +158,8 @@ class KVConnectorBase(ABC):
     @abstractmethod
     def recv_kv_caches_and_hidden_states(
         self, model_executable: torch.nn.Module,
-        model_input: "ModelInputForGPUWithSamplingMetadata",
+        input_tokens,
+        attn_metadata,
         kv_caches: List[torch.Tensor]
     ) -> Tuple[Union[torch.Tensor, IntermediateTensors], bool,
                "ModelInputForGPUWithSamplingMetadata"]:
