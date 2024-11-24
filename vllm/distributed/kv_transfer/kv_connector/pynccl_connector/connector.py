@@ -278,10 +278,8 @@ class PyNcclConnector(KVConnectorBase):
             # LOOP START
             kv_cache = kv_caches[layer_id - start_layer]
 
-            _, _, num_heads, head_size = kv_cache[0].shape
-
-            key_cache = kv_cache[0].reshape(-1, num_heads, head_size)
-            value_cache = kv_cache[1].reshape(-1, num_heads, head_size)
+            key_cache = kv_cache[0]
+            value_cache = kv_cache[1]
 
             current_slot_mapping = slot_mapping_flat[start_pos:end_pos]
 
@@ -345,6 +343,7 @@ class PyNcclConnector(KVConnectorBase):
             # update the end position based on how many tokens are cached.
             end_pos = start_pos + num_computed_tokens
 
+            
 
             kv_cache = kv_caches[layer_id - start_layer]
             layer = model_executable.layers[layer_id]
@@ -352,11 +351,10 @@ class PyNcclConnector(KVConnectorBase):
             key_cache, value_cache = kv_cache[0], kv_cache[1]
             kv_origin_shape = key_cache.shape
             
-            _, _, num_heads, head_size = kv_cache[0].shape
-            key_cache = torch.reshape(key_cache, (-1, num_heads, head_size))
-            value_cache = torch.reshape(value_cache, (-1, num_heads, head_size))
-            key = torch.reshape(key, (-1, num_heads, head_size))
-            value = torch.reshape(value, (-1, num_heads, head_size))
+            key_cache = torch.reshape(key_cache, (-1, kv_origin_shape[-1]))
+            value_cache = torch.reshape(value_cache, (-1, kv_origin_shape[-1]))
+            key = torch.reshape(key, (-1, kv_origin_shape[-1]))
+            value = torch.reshape(value, (-1, kv_origin_shape[-1]))
             
             current_slot_mapping = slot_mapping[start_pos:end_pos]
             key_cache[current_slot_mapping] = key
