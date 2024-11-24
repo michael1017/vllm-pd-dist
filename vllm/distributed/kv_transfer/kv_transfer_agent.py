@@ -59,14 +59,15 @@ class KVTransferAgent:
     def send_kv_caches_and_hidden_states(
         self,
         model_executable: torch.nn.Module,
-        model_input: "ModelInputForGPUWithSamplingMetadata",
+        input_tokens,
+        attn_metadata,
         kv_caches: List[torch.Tensor],
         hidden_or_intermediate_states: Union[torch.Tensor,
                                              IntermediateTensors],
     ) -> None:
 
         self.connector.send_kv_caches_and_hidden_states(
-            model_executable, model_input, kv_caches,
+            model_executable, input_tokens, attn_metadata, kv_caches,
             hidden_or_intermediate_states)
 
     def close(self) -> None:
@@ -74,10 +75,54 @@ class KVTransferAgent:
 
     def recv_kv_caches_and_hidden_states(
         self, model_executable: torch.nn.Module,
-        model_input: "ModelInputForGPUWithSamplingMetadata",
+        input_tokens,
+        attn_metadata,
         kv_caches: List[torch.Tensor]
     ) -> Tuple[Union[torch.Tensor, IntermediateTensors], bool,
                "ModelInputForGPUWithSamplingMetadata"]:
 
         return self.connector.recv_kv_caches_and_hidden_states(
-            model_executable, model_input, kv_caches)
+            model_executable, input_tokens, attn_metadata, kv_caches)
+        
+    def send_single_layer_kv_cache(
+        self,
+        model_executable: torch.nn.Module,
+        input_tokens,
+        attn_metadata,
+        kv_caches: List[torch.Tensor],
+        layer_id
+    ) -> None:
+
+        self.connector.send_single_layer_kv_cache(
+            model_executable, input_tokens, attn_metadata, kv_caches, layer_id)
+
+    def recv_single_layer_kv_cache(
+        self,
+        model_executable: torch.nn.Module,
+        input_tokens,
+        attn_metadata,
+        kv_caches: List[torch.Tensor],
+        layer_id
+    ) -> None:
+
+        self.connector.recv_single_layer_kv_cache(
+            model_executable, input_tokens, attn_metadata, kv_caches, layer_id)
+    
+    def send_hidden_states(
+        self,
+        input_tokens,
+        attn_metadata,
+        hidden_or_intermediate_states,
+    ):
+        self.connector.send_hidden_states(
+            input_tokens, attn_metadata, hidden_or_intermediate_states
+        )
+
+    def recv_hidden_states(
+        self,
+        input_tokens,
+        attn_metadata,
+    ): 
+        return self.connector.recv_hidden_states(
+            input_tokens, attn_metadata
+        )

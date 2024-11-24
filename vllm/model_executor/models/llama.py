@@ -29,8 +29,10 @@ from transformers import LlamaConfig
 from vllm.attention import Attention, AttentionMetadata
 from vllm.compilation.decorators import support_torch_compile
 from vllm.config import CacheConfig, VllmConfig
-from vllm.distributed import (get_pp_group, get_tensor_model_parallel_rank,
+from vllm.distributed import (get_kv_transfer_group, get_pp_group, 
+                              get_tensor_model_parallel_rank,
                               get_tensor_model_parallel_world_size)
+from vllm.distributed.kv_transfer.util import need_recv_kv, need_send_kv
 from vllm.model_executor.layers.activation import SiluAndMul
 from vllm.model_executor.layers.layernorm import RMSNorm
 from vllm.model_executor.layers.linear import (MergedColumnParallelLinear,
@@ -274,6 +276,7 @@ class LlamaModel(nn.Module):
     def __init__(self, *, vllm_config: VllmConfig, prefix: str = ""):
         super().__init__()
 
+        self.vllm_config = vllm_config
         config = vllm_config.model_config.hf_config
         cache_config = vllm_config.cache_config
         quant_config = vllm_config.quant_config
@@ -324,6 +327,34 @@ class LlamaModel(nn.Module):
         intermediate_tensors: Optional[IntermediateTensors],
         inputs_embeds: Optional[torch.Tensor] = None,
     ) -> Union[torch.Tensor, IntermediateTensors]:
+        
+        bypass_model_exec = False
+        kv_transfer_group = get_kv_transfer_group()
+        if need_recv_kv(self.vllm_config, attn_metadata, kv_caches):
+            for layer_id in range(self.start_layer, self.end_layer):
+                kv_transfer_group.recv_single_layer_kv_cache(
+                    # model is used to know which layer the current worker
+                    # is working on, so that we can receive KV for only those
+                    # layers.
+                    self,
+                    input_ids,
+                    attn_metadata,
+                    kv_caches,
+                    layer_id
+                )
+            
+            hidden_states, bypass_model_exec = \
+                kv_transfer_group.recv_hidden_states(
+                    input_ids,
+                    attn_metadata,
+                )
+
+            # print(hidden_states)
+        
+        if bypass_model_exec:
+            return hidden_states
+        
+
         if get_pp_group().is_first_rank:
             if inputs_embeds is not None:
                 hidden_states = inputs_embeds
@@ -335,11 +366,20 @@ class LlamaModel(nn.Module):
             hidden_states = intermediate_tensors["hidden_states"]
             residual = intermediate_tensors["residual"]
 
+        is_need_send_kv = need_send_kv(self.vllm_config, attn_metadata, kv_caches)
         for i in range(self.start_layer, self.end_layer):
             layer = self.layers[i]
             hidden_states, residual = layer(positions, hidden_states,
                                             kv_caches[i - self.start_layer],
                                             attn_metadata, residual)
+            if is_need_send_kv:
+                kv_transfer_group.send_single_layer_kv_cache(
+                    self, 
+                    input_ids, 
+                    attn_metadata, 
+                    kv_caches, 
+                    i
+                )
 
         if not get_pp_group().is_last_rank:
             return IntermediateTensors({
@@ -348,6 +388,17 @@ class LlamaModel(nn.Module):
             })
 
         hidden_states, _ = self.norm(hidden_states, residual)
+        
+        # # Sending KV cache in distributed KV cache transfer setting
+        # # NOTE: the send operation is non-blocking
+        if is_need_send_kv:
+            kv_transfer_group.send_hidden_states(
+                input_ids,
+                attn_metadata,
+                hidden_states,
+            )
+            #print(hidden_states)
+            
         return hidden_states
 
     def load_weights(self, weights: Iterable[Tuple[str,
