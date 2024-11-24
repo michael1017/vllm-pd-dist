@@ -343,9 +343,6 @@ class LlamaModel(nn.Module):
                     layer_id
                 )
             
-            print(kv_caches[0][0][0])
-            print(kv_caches[0][0][0].shape)
-            
             hidden_states, bypass_model_exec = \
                 kv_transfer_group.recv_hidden_states(
                     input_ids,
@@ -395,8 +392,6 @@ class LlamaModel(nn.Module):
         # # Sending KV cache in distributed KV cache transfer setting
         # # NOTE: the send operation is non-blocking
         if is_need_send_kv:
-            print(kv_caches[0][0][0])
-            print(kv_caches[0][0][0].shape)
             kv_transfer_group.send_hidden_states(
                 input_ids,
                 attn_metadata,

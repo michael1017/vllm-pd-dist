@@ -350,16 +350,20 @@ class PyNcclConnector(KVConnectorBase):
             layer = model_executable.layers[layer_id]
 
             key_cache, value_cache = kv_cache[0], kv_cache[1]
-            ops.reshape_and_cache_flash(
-                key.to(key_cache.device),
-                value.to(value_cache.device),
-                key_cache,
-                value_cache,
-                slot_mapping[start_pos:end_pos],
-                layer.self_attn.attn.kv_cache_dtype,
-                layer.self_attn.attn._k_scale,
-                layer.self_attn.attn._v_scale,
-            )
+            kv_origin_shape = key_cache.shape
+            
+            _, _, num_heads, head_size = kv_cache[0].shape
+            key_cache = torch.reshape(key_cache, (-1, num_heads, head_size))
+            value_cache = torch.reshape(value_cache, (-1, num_heads, head_size))
+            key = torch.reshape(key, (-1, num_heads, head_size))
+            value = torch.reshape(value, (-1, num_heads, head_size))
+            
+            current_slot_mapping = slot_mapping[start_pos:end_pos]
+            key_cache[current_slot_mapping] = key
+            value_cache[current_slot_mapping] = value
+            
+            key_cache = torch.reshape(key_cache, kv_origin_shape)
+            value_cache = torch.reshape(value_cache, kv_origin_shape)
 
         return
 
