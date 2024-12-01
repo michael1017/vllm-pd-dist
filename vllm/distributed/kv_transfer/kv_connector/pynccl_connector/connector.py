@@ -214,6 +214,8 @@ class PyNcclConnector(KVConnectorBase):
                            model_executable.model.end_layer):
 
                 kv_cache = kv_caches[i - model_executable.model.start_layer]
+                key = keys[i - model_executable.model.start_layer]
+                value = values[i - model_executable.model.start_layer]
                 layer = model_executable.model.layers[i]
 
                 key_cache, value_cache = kv_cache[0], kv_cache[1]
