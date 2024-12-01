@@ -130,10 +130,8 @@ class PyNcclConnector(KVConnectorBase):
             for layer_id in range(start_layer, end_layer):
                 kv_cache = kv_caches[layer_id - start_layer]
 
-                _, _, num_heads, head_size = kv_cache[0].shape
-
-                key_cache = kv_cache[0].reshape(-1, num_heads, head_size)
-                value_cache = kv_cache[1].reshape(-1, num_heads, head_size)
+                key_cache = kv_cache[0]
+                value_cache = kv_cache[1]
 
                 current_slot_mapping = slot_mapping_flat[start_pos:end_pos]
 
@@ -219,18 +217,19 @@ class PyNcclConnector(KVConnectorBase):
                 layer = model_executable.model.layers[i]
 
                 key_cache, value_cache = kv_cache[0], kv_cache[1]
-                ops.reshape_and_cache_flash(
-                    keys[i - model_executable.model.start_layer].to(
-                        key_cache.device),
-                    values[i - model_executable.model.start_layer].to(
-                        value_cache.device),
-                    key_cache,
-                    value_cache,
-                    slot_mapping[start_pos:end_pos],
-                    layer.self_attn.attn.kv_cache_dtype,
-                    layer.self_attn.attn._k_scale,
-                    layer.self_attn.attn._v_scale,
-                )
+                kv_origin_shape = key_cache.shape
+            
+                key_cache = torch.reshape(key_cache, (-1, kv_origin_shape[-1]))
+                value_cache = torch.reshape(value_cache, (-1, kv_origin_shape[-1]))
+                key = torch.reshape(key, (-1, kv_origin_shape[-1]))
+                value = torch.reshape(value, (-1, kv_origin_shape[-1]))
+                
+                current_slot_mapping = slot_mapping[start_pos:end_pos]
+                key_cache[current_slot_mapping] = key
+                value_cache[current_slot_mapping] = value
+                
+                key_cache = torch.reshape(key_cache, kv_origin_shape)
+                value_cache = torch.reshape(value_cache, kv_origin_shape)
 
             hidden_or_intermediate_states_for_one_req.append(hidden)
 
